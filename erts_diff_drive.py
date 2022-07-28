@@ -6,12 +6,12 @@
 # Avoid needing display if plots aren't being shown
 import sys
 
-import control as ct
 import frccontrol as fct
 import math
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy as sp
+from scipy.signal import StateSpace
 import time
 
 DT = 0.02
@@ -117,7 +117,7 @@ def differential_drive(motor, num_motors, m, r, rb, J, Gl, Gr, states):
                   [0, 0]])
     # fmt: on
 
-    return ct.StateSpace(A, B, C, D, remove_useless=False)
+    return StateSpace(A, B, C, D)
 
 
 def discretize_ab(A, B, dt):
