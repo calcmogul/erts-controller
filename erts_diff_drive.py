@@ -355,7 +355,7 @@ class DifferentialDrive(fct.System):
 
         end = time.time()
         print(
-            f"\riteration: {self.t}/{self.refs.shape[1] - 1}, dt = {round((end - start) * 1e3)}ms ",
+            f"\riteration: {self.t}/{self.refs.shape[1] - 1}, dt = {round((end - start) * 1e3)} ms ",
             end="",
         )
 
@@ -383,7 +383,7 @@ def main():
     state_rec, ref_rec, u_rec, y_rec = diff_drive.generate_time_responses(t, refs)
     end = time.time()
     print("")
-    print(f"Total time = {round(end - start, 3)}s")
+    print(f"Total time = {round(end - start, 3)} s")
 
     plt.figure(1)
     x_rec = np.squeeze(np.asarray(state_rec[0, :]))
