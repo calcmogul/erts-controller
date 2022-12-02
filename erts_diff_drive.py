@@ -380,7 +380,7 @@ def main():
     diff_drive = DifferentialDrive(dt, x)
 
     start = time.time()
-    state_rec, ref_rec, u_rec, y_rec = diff_drive.generate_time_responses(t, refs)
+    state_rec, ref_rec, u_rec, y_rec = diff_drive.generate_time_responses(refs)
     end = time.time()
     print("")
     print(f"Total time = {round(end - start, 3)} s")
