@@ -88,9 +88,6 @@ def differential_drive(motor, num_motors, m, r, rb, J, Gl, Gr, states):
     C2 = Gl * motor.Kt / (motor.R * r)
     C3 = -(Gr**2) * motor.Kt / (motor.Kv * motor.R * r**2)
     C4 = Gr * motor.Kt / (motor.R * r)
-    x = states[0, 0]
-    y = states[1, 0]
-    theta = states[2, 0]
     vl = states[3, 0]
     vr = states[4, 0]
     v = (vr + vl) / 2.0
@@ -218,17 +215,19 @@ class DifferentialDrive(fct.System):
         )
 
     def design_controller_observer(self):
+        # Q = diag(1/q²)
+        # Q⁻¹ = diag(q²)
         q_x = 0.0625
         q_y = 0.125
         q_heading = 10.0
         q_vel = 0.95
         q = [q_x, q_y, q_heading, q_vel, q_vel]
-        Q = np.diag(1.0 / np.square(q))
-        self.Qinv = np.linalg.inv(Q)
+        self.Qinv = np.diag(np.square(q))
 
+        # R = diag(1/r²)
+        # R⁻¹ = diag(r²)
         r = [12.0, 12.0]
-        R = np.diag(1.0 / np.square(r))
-        self.Rinv = np.linalg.inv(R)
+        self.Rinv = np.diag(np.square(r))
 
         self.dt = DT
         self.t = 0
@@ -363,9 +362,6 @@ class DifferentialDrive(fct.System):
 def main():
     t = []
     refs = []
-
-    # Radius of robot in meters
-    rb = 0.59055 / 2.0
 
     refs_tmp = get_square_refs()
     for i in range(refs_tmp.shape[1]):
