@@ -1,49 +1,65 @@
 #!/usr/bin/env python3
 
-# Runs Extended Rauch-Tung-Striebel controller on differential drive
-# https://file.tavsys.net/control/papers/Extended%20Rauch-Tung-Striebel%20Controller%2C%20ZAGSS.pdf
+"""
+Runs Extended Rauch-Tung-Striebel controller on differential drive.
+https://file.tavsys.net/control/papers/Extended%20Rauch-Tung-Striebel%20Controller%2C%20ZAGSS.pdf
+"""
 
-# Avoid needing display if plots aren't being shown
+import math
+import time
 import sys
 
 import frccontrol as fct
-import math
 import matplotlib.pyplot as plt
 import numpy as np
-import scipy as sp
-from scipy.signal import StateSpace
-import time
 
 DT = 0.02
+HORIZON = 50
 
 
 def lerp(a, b, t):
+    """
+    Linear interpolation between a and b.
+
+    Keyword arguments:
+    a -- left value
+    b -- right value
+    t -- interpolant [0, 1]
+    """
     return a + t * (b - a)
 
 
 def get_square_refs():
-    refs = np.zeros((5, 0))
-    v = 2
-    pts = [
-        np.array([[0], [0]]),
-        np.array([[2], [0]]),
-        np.array([[2], [6]]),
-        np.array([[-4], [6]]),
-        np.array([[-4], [10]]),
-        np.array([[10], [10]]),
-        np.array([[10], [4]]),
-        np.array([[-3], [4]]),
-        np.array([[-3], [0]]),
+    """
+    Generate square path reference.
+    """
+    refs = []
+    heading = 0
+    points = [
+        (0, 0),
+        (2, 0),
+        (2, 2),
+        (-2, 2),
+        (-2, 4),
+        (4, 4),
+        (4, -2),
+        (0, -2),
     ]
-    pts = [p + np.array([[0], [-4]]) for p in pts]
-    for i in range(len(pts)):
-        pt0 = pts[i]
-        if i + 1 < len(pts):
-            pt1 = pts[i + 1]
-        else:
-            pt1 = pts[0]
+    v = 2
+    point_vectors = [np.array([[x], [y]]) for x, y in points]
+    for pt0, pt1 in zip(point_vectors, point_vectors[1:]):
         diff = pt1 - pt0
-        t = math.hypot(diff[0, 0], diff[1, 0]) / v
+        t = math.sqrt(diff.T @ diff) / v
+        new_heading = math.atan2(diff[1, 0], diff[0, 0])
+
+        heading_diff = new_heading - heading
+        if heading_diff > math.pi:
+            if heading_diff > 0:
+                heading += heading_diff - 2 * math.pi
+            else:
+                heading += heading_diff + 2 * math.pi
+        else:
+            heading += heading_diff
 
         num_pts = int(t / DT)
         for j in range(num_pts):
@@ -52,147 +68,32 @@ def get_square_refs():
                 [
                     [mid[0, 0]],
                     [mid[1, 0]],
-                    [math.atan2(diff[1, 0], diff[0, 0])],
+                    [heading],
                     [v],
                     [v],
                 ]
             )
-            refs = np.hstack((refs, ref))
+            refs.append(ref)
     return refs
 
 
-def differential_drive(motor, num_motors, m, r, rb, J, Gl, Gr, states):
-    """Returns the state-space model for a differential drive.
-
-    States: [[x], [y], [theta], [left velocity], [right velocity]]
-    Inputs: [[left voltage], [right voltage]]
-    Outputs: [[theta], [left velocity], [right velocity]]
-
-    Keyword arguments:
-    motor -- instance of DcBrushedMotor
-    num_motors -- number of motors driving the mechanism
-    m -- mass of robot in kg
-    r -- radius of wheels in meters
-    rb -- radius of robot in meters
-    J -- moment of inertia of the differential drive in kg-m^2
-    Gl -- gear ratio of left side of differential drive
-    Gr -- gear ratio of right side of differential drive
-    states -- state vector around which to linearize model
-
-    Returns:
-    StateSpace instance containing continuous model
+class DifferentialDrive:
     """
-    motor = fct.models.gearbox(motor, num_motors)
-
-    C1 = -(Gl**2) * motor.Kt / (motor.Kv * motor.R * r**2)
-    C2 = Gl * motor.Kt / (motor.R * r)
-    C3 = -(Gr**2) * motor.Kt / (motor.Kv * motor.R * r**2)
-    C4 = Gr * motor.Kt / (motor.R * r)
-    vl = states[3, 0]
-    vr = states[4, 0]
-    v = (vr + vl) / 2.0
-    if abs(v) < 1e-9:
-        vl = 1e-9
-        vr = 1e-9
-        v = 1e-9
-    # fmt: off
-    A = np.array([[0, 0, 0, 0.5, 0.5],
-                  [0, 0, v, 0, 0],
-                  [0, 0, 0, -0.5 / rb, 0.5 / rb],
-                  [0, 0, 0, (1 / m + rb**2 / J) * C1, (1 / m - rb**2 / J) * C3],
-                  [0, 0, 0, (1 / m - rb**2 / J) * C1, (1 / m + rb**2 / J) * C3]])
-    B = np.array([[0, 0],
-                  [0, 0],
-                  [0, 0],
-                  [(1 / m + rb**2 / J) * C2, (1 / m - rb**2 / J) * C4],
-                  [(1 / m - rb**2 / J) * C2, (1 / m + rb**2 / J) * C4]])
-    C = np.array([[0, 0, 1, 0, 0],
-                  [0, 0, 0, 1, 0],
-                  [0, 0, 0, 0, 1]])
-    D = np.array([[0, 0],
-                  [0, 0],
-                  [0, 0]])
-    # fmt: on
-
-    return StateSpace(A, B, C, D)
-
-
-def discretize_ab(A, B, dt):
-    """Returns discretized versions of A and B with sample period dt.
-
-    Keyword arguments:
-    A -- system matrix
-    B -- input matrix
-    dt -- sample period
+    Differential drive with ERTS controller.
     """
-    states = A.shape[0]
-    inputs = B.shape[1]
-    M = sp.linalg.expm(
-        np.block(
-            [
-                [A, B],
-                [np.zeros((inputs, states)), np.zeros((inputs, inputs))],
-            ]
-        )
-        * dt
-    )
-    return M[:states, :states], M[:states, states:]
 
-
-class DifferentialDrive(fct.System):
-    def __init__(self, dt, states):
+    def __init__(self, dt):
         """Drivetrain subsystem.
 
         Keyword arguments:
         dt -- time between model/controller updates
-        states -- state vector around which to linearize model
         """
-        state_labels = [
-            ("x position", "m"),
-            ("y position", "m"),
-            ("Heading", "rad"),
-            ("Left velocity", "m/s"),
-            ("Right velocity", "m/s"),
-        ]
-        u_labels = [("Left voltage", "V"), ("Right voltage", "V")]
-        self.set_plot_labels(state_labels, u_labels)
+        self.dt = dt
 
-        u_min = np.array([[-12.0], [-12.0]])
-        u_max = np.array([[12.0], [12.0]])
-
-        f = (
-            lambda x, u: np.array(
-                [
-                    [(x[3, 0] + x[4, 0]) / 2.0 * math.cos(x[2, 0])],
-                    [(x[3, 0] + x[4, 0]) / 2.0 * math.sin(x[2, 0])],
-                    [(x[4, 0] - x[3, 0]) / (2.0 * self.rb)],
-                    [self.sysc.A[3, 3] * x[3, 0] + self.sysc.A[3, 4] * x[4, 0]],
-                    [self.sysc.A[4, 3] * x[3, 0] + self.sysc.A[4, 4] * x[4, 0]],
-                ]
-            )
-            + self.sysc.B @ u
-        )
-        self.f = f
-        fct.System.__init__(
-            self, u_min, u_max, dt, states, np.zeros((2, 1)), nonlinear_func=f
-        )
-
-    def create_model(self, states, inputs):
-        """Relinearize model around given state.
-
-        Keyword arguments:
-        states -- state vector around which to linearize model
-        inputs -- input vector around which to linearize model
-
-        Returns:
-        StateSpace instance containing continuous state-space model
-        """
         # Number of motors per side
         num_motors = 3.0
-
         # Gear ratio
         G = 60.0 / 11.0
-
         # Drivetrain mass in kg
         m = 52
         # Radius of wheels in meters
@@ -202,184 +103,259 @@ class DifferentialDrive(fct.System):
         # Moment of inertia of the differential drive in kg-m^2
         J = 6.0
 
-        return differential_drive(
-            fct.models.MOTOR_CIM,
-            num_motors,
-            m,
-            r,
-            self.rb,
-            J,
-            G,
-            G,
-            np.asarray(states),
+        motor = fct.models.gearbox(fct.models.MOTOR_CIM, num_motors)
+
+        C1 = -(G**2) * motor.Kt / (motor.Kv * motor.R * r**2)
+        C2 = G * motor.Kt / (motor.R * r)
+        C3 = -(G**2) * motor.Kt / (motor.Kv * motor.R * r**2)
+        C4 = G * motor.Kt / (motor.R * r)
+        self.velocity_A = np.array(
+            [
+                [(1 / m + self.rb**2 / J) * C1, (1 / m - self.rb**2 / J) * C3],
+                [(1 / m - self.rb**2 / J) * C1, (1 / m + self.rb**2 / J) * C3],
+            ]
+        )
+        self.velocity_B = np.array(
+            [
+                [(1 / m + self.rb**2 / J) * C2, (1 / m - self.rb**2 / J) * C4],
+                [(1 / m - self.rb**2 / J) * C2, (1 / m + self.rb**2 / J) * C4],
+            ]
         )
 
-    def design_controller_observer(self):
+        # Linearized dynamics
+        self.Ac = np.zeros((5, 5))
+        self.Ac[2, 3] = -0.5 / self.rb
+        self.Ac[2, 4] = 0.5 / self.rb
+        self.Ac[3:5, 3:5] = self.velocity_A
+        self.Bc = np.block(
+            [
+                [np.zeros((3, 2))],
+                [self.velocity_B],
+            ]
+        )
+
+        # Sim variables
+        self.x = np.zeros((5, 1))
+        self.u = np.zeros((2, 1))
+        self.y = np.zeros((3, 1))
+
+        self.u_min = np.array([[-12.0], [-12.0]])
+        self.u_max = np.array([[12.0], [12.0]])
+
+        # States: x (m), y (m), heading (rad), left velocity (m/s),
+        #         right velocity (m/s)
         # Q = diag(1/q²)
         # Q⁻¹ = diag(q²)
-        q_x = 0.0625
-        q_y = 0.125
-        q_heading = 10.0
-        q_vel = 0.95
-        q = [q_x, q_y, q_heading, q_vel, q_vel]
-        self.Qinv = np.diag(np.square(q))
+        self.Qinv = np.diag(np.square([0.125, 0.125, 10.0, 0.95, 0.95]))
 
+        # Inputs: Left voltage (V), right voltage (V)
         # R = diag(1/r²)
         # R⁻¹ = diag(r²)
-        r = [12.0, 12.0]
-        self.Rinv = np.diag(np.square(r))
+        self.Rinv = np.diag(np.square([12.0, 12.0]))
 
-        self.dt = DT
         self.t = 0
 
         # Get reference trajectory
         self.refs = get_square_refs()
 
-        q_pos = 0.05
-        q_heading = 10.0
-        q_vel = 1.0
-        r_gyro = 0.0001
-        r_vel = 0.01
-        self.design_kalman_filter(
-            [q_pos, q_pos, q_heading, q_vel, q_vel], [r_gyro, r_vel, r_vel]
+        # Kalman smoother storage
+        self.x_hat_pre = [np.zeros((5, 1)) for _ in range(len(self.refs))]
+        self.x_hat_pre = [np.zeros((5, 1)) for _ in range(len(self.refs))]
+        self.x_hat_post = [np.zeros((5, 1)) for _ in range(len(self.refs))]
+        self.A = [np.zeros((5, 5)) for _ in range(len(self.refs))]
+        self.P_pre = [np.zeros((5, 5)) for _ in range(len(self.refs))]
+        self.P_post = [np.zeros((5, 5)) for _ in range(len(self.refs))]
+        self.x_hat_smooth = [np.zeros((5, 1)) for _ in range(len(self.refs))]
+
+    def f(self, x, u):
+        """
+        Nonlinear differential drive dynamics.
+
+        States: [[x], [y], [heading], [left velocity], [right velocity]]
+        Inputs: [[left voltage], [right voltage]]
+
+        Keyword arguments:
+        x -- state vector
+        u -- input vector
+
+        Returns:
+        dx/dt -- state derivative
+        """
+        return np.block(
+            [
+                [(x[3, 0] + x[4, 0]) / 2.0 * math.cos(x[2, 0])],
+                [(x[3, 0] + x[4, 0]) / 2.0 * math.sin(x[2, 0])],
+                [(x[4, 0] - x[3, 0]) / (2.0 * self.rb)],
+                [self.velocity_A @ x[3:5, :] + self.velocity_B @ u],
+            ]
         )
 
-        # Initialize matrix storage
-        self.x_hat_pre_rec = np.zeros((5, 1, self.refs.shape[1]))
-        self.x_hat_post_rec = np.zeros((5, 1, self.refs.shape[1]))
-        self.A_rec = np.zeros((5, 5, self.refs.shape[1]))
-        self.B_rec = np.zeros((5, 2, self.refs.shape[1]))
-        self.P_pre_rec = np.zeros((5, 5, self.refs.shape[1]))
-        self.P_post_rec = np.zeros((5, 5, self.refs.shape[1]))
-        self.x_hat_smooth_rec = np.zeros((5, 1, self.refs.shape[1]))
+    def h(self, x):
+        """
+        Nonlinear differential drive measurement model.
 
-    def update_controller(self, next_r):
+        Outputs: [[x], [y], [heading]]
+
+        Keyword arguments:
+        x -- state vector
+
+        Returns:
+        y -- measurement vector
+        """
+        return x[:3, :]
+
+    # pragma pylint: disable=unused-argument
+    def df_dx(self, x, u):
+        """
+        Returns the Jacobian of f with respect to the state.
+
+        Keyword arguments:
+        x -- the current state
+        u -- the current input
+        """
+        v = (x[3, 0] + x[4, 0]) / 2.0
+        c = math.cos(x[2, 0])
+        s = math.sin(x[2, 0])
+        self.Ac[0, 2] = -v * s
+        self.Ac[0, 3] = 0.5 * c
+        self.Ac[0, 4] = 0.5 * c
+        self.Ac[1, 2] = v * c
+        self.Ac[1, 3] = 0.5 * s
+        self.Ac[1, 4] = 0.5 * s
+        return self.Ac
+
+    # pragma pylint: disable=unused-argument
+    def dh_dx(self, x, u):
+        """
+        Returns the Jacobian of h with respect to the state.
+
+        Keyword arguments:
+        x -- the current state
+        u -- the current input
+        """
+        return np.array([[1, 0, 0, 0, 0], [0, 1, 0, 0, 0], [0, 0, 1, 0, 0]])
+
+    # pragma pylint: disable=unused-argument
+    def update(self, r, next_r):
+        """
+        Advance the model by one timestep.
+
+        Keyword arguments:
+        r -- the current reference
+        next_r -- the next reference
+        """
+        self.x = fct.rk4(self.f, self.x, self.u, self.dt)
+
         start = time.time()
         # Since this is the last reference, there are no reference dynamics to
         # follow
-        if self.t == self.refs.shape[1] - 1:
+        if self.t == len(self.refs) - 1:
             self.u = np.zeros((2, 1))
             return
 
-        x_hat = self.x_hat
-        P = np.zeros((x_hat.shape[0], x_hat.shape[0]))
-
-        self.x_hat_pre_rec[:, :, self.t] = x_hat
-        self.P_pre_rec[:, :, self.t] = P
-        self.x_hat_post_rec[:, :, self.t] = x_hat
-        self.P_post_rec[:, :, self.t] = P
+        states = self.x.shape[0]
 
         # Linearize model
-        v = (x_hat[3, 0] + x_hat[4, 0]) / 2.0
-        c = math.cos(x_hat[2, 0])
-        s = math.sin(x_hat[2, 0])
-        Ac = np.block(
-            [
-                [
-                    np.array(
-                        [
-                            [0, 0, -v * s, 0.5 * c, 0.5 * c],
-                            [0, 0, v * c, 0.5 * s, 0.5 * s],
-                            [0, 0, 0, -0.5 / self.rb, 0.5 / self.rb],
-                        ]
-                    )
-                ],
-                [np.zeros((2, 3)), self.sysc.A[3:5, 3:5]],
-            ]
-        )
-        A, B = discretize_ab(Ac, self.sysc.B, self.dt)
-        self.B_rec[:, :, self.t] = B
+        Ac = self.df_dx(self.x, np.zeros((2, 1)))
+        _, B = fct.discretize_ab(Ac, self.Bc, self.dt)
+        Binv = np.linalg.pinv(B)
 
-        C = np.eye(5)
+        self.x_hat_pre[self.t] = self.x.copy()
+        self.P_pre[self.t] = np.zeros((states, states))
+        self.x_hat_post[self.t] = self.x.copy()
+        self.P_post[self.t] = np.zeros((states, states))
 
-        # Filter
-        N = min(self.refs.shape[1] - 1, self.t + 50)
-        for k in range(self.t + 1, N + 1):
-            # Linearize model
-            v = (x_hat[3, 0] + x_hat[4, 0]) / 2.0
-            c = math.cos(x_hat[2, 0])
-            s = math.sin(x_hat[2, 0])
-            Ac[0, 2] = -v * s
-            Ac[0, 3] = 0.5 * c
-            Ac[0, 4] = 0.5 * c
-            Ac[1, 2] = v * c
-            Ac[1, 3] = 0.5 * s
-            Ac[1, 4] = 0.5 * s
-            A, B = discretize_ab(Ac, self.sysc.B, self.dt)
-
-            P = A @ P @ A.T + B @ self.Rinv @ B.T
-
-            x_hat = fct.runge_kutta(self.f, x_hat, np.zeros((2, 1)), self.dt)
-
-            self.x_hat_pre_rec[:, :, k] = x_hat
-            self.P_pre_rec[:, :, k] = P
-            self.A_rec[:, :, k] = A
-            self.B_rec[:, :, k] = B
-
-            S = C @ P @ C.T + C @ self.Qinv @ C.T
-            K = np.linalg.solve(S.T, C @ P.T).T
-            x_hat += K @ (self.refs[:, k : k + 1] - C @ x_hat)
-            P = (np.eye(5) - K @ C) @ P
-
-            self.x_hat_post_rec[:, :, k] = x_hat
-            self.P_post_rec[:, :, k] = P
-
-        # Smoother
-
-        # Last estimate is already optimal, so add it to the record
-        self.x_hat_smooth_rec[:, :, N] = self.x_hat_post_rec[:, :, N]
-
-        for k in range(N - 1, (self.t + 1) - 1, -1):
-            K = (
-                self.P_post_rec[:, :, k]
-                @ self.A_rec[:, :, k].T
-                @ np.linalg.pinv(self.P_pre_rec[:, :, k + 1])
-            )
-            x_hat = self.x_hat_post_rec[:, :, k] + K @ (
-                self.x_hat_smooth_rec[:, :, k + 1] - self.x_hat_pre_rec[:, :, k + 1]
+        # Prediction
+        N = min(len(self.refs) - 1, self.t + HORIZON)
+        for tau in range(self.t + 1, N + 1):
+            self.x_hat_pre[tau] = fct.rk4(
+                self.f, self.x_hat_post[tau - 1], np.zeros((2, 1)), self.dt
             )
 
-            self.x_hat_smooth_rec[:, :, k] = x_hat
+            # Linearization
+            self.A[tau - 1] = fct.discretize_a(
+                self.df_dx(self.x_hat_post[tau - 1], np.zeros((2, 1))), self.dt
+            )
+            C = self.dh_dx(self.x_hat_pre[tau], np.zeros((2, 1)))
 
-        self.u = np.linalg.pinv(self.B_rec[:, :, self.t]) @ (
-            self.x_hat_smooth_rec[:, :, self.t + 1]
-            - fct.runge_kutta(self.f, self.x_hat, np.zeros((2, 1)), self.dt)
+            s_tau = C @ self.refs[tau]
+
+            Q = B @ self.Rinv @ B.T
+            self.P_pre[tau] = (
+                self.A[tau - 1] @ self.P_post[tau - 1] @ self.A[tau - 1].T + Q
+            )
+
+            # S = CPCᵀ + R
+            R = C @ self.Qinv @ C.T
+            S = C @ self.P_pre[tau] @ C.T + R
+
+            # We want to put K = PCᵀS⁻¹ into Ax = b form so we can solve it more
+            # efficiently.
+            #
+            # K = PCᵀS⁻¹
+            # KS = PCᵀ
+            # (KS)ᵀ = (PCᵀ)ᵀ
+            # SᵀKᵀ = CPᵀ
+            #
+            # The solution of Ax = b can be found via x = A.solve(b).
+            #
+            # Kᵀ = Sᵀ.solve(CPᵀ)
+            # K = (Sᵀ.solve(CPᵀ))ᵀ
+            K = np.linalg.solve(S.T, C @ self.P_pre[tau].T).T
+
+            self.x_hat_post[tau] = self.x_hat_pre[tau] + K @ (
+                s_tau - self.h(self.x_hat_pre[tau])
+            )
+            self.P_post[tau] = (np.eye(5) - K @ C) @ self.P_pre[tau] @ (
+                np.eye(5) - K @ C
+            ).T + K @ R @ K.T
+
+        # Last filtered estimate is already optimal smoothed estimate
+        self.x_hat_smooth[N] = self.x_hat_post[N]
+
+        # Smoothing
+        for tau in range(N - 1, (self.t + 1) - 1, -1):
+            L = self.P_post[tau] @ self.A[tau].T @ np.linalg.pinv(self.P_pre[tau + 1])
+            self.x_hat_smooth[tau] = self.x_hat_post[tau] + L @ (
+                self.x_hat_smooth[tau + 1] - self.x_hat_pre[tau + 1]
+            )
+
+        # x̂ₖ₊₁ = f(x̂ₖ) + Buₖ
+        # Buₖ = x̂ₖ₊₁ − f(x̂ₖ)
+        # uₖ = B⁺(x̂ₖ₊₁ − f(x̂ₖ))
+        self.u = Binv @ (
+            self.x_hat_smooth[self.t + 1]
+            - fct.rk4(self.f, self.x_hat_post[self.t], np.zeros((2, 1)), self.dt)
         )
 
         u_cap = np.max(np.abs(self.u))
         if u_cap > 12.0:
             self.u = self.u / u_cap * 12.0
-        self.r = next_r
         self.t += 1
 
         end = time.time()
         print(
-            f"\riteration: {self.t}/{self.refs.shape[1] - 1}, dt = {round((end - start) * 1e3)} ms ",
+            f"\riteration: {self.t}/{len(self.refs) - 1}, dt = {round((end - start) * 1e3)} ms ",
             end="",
         )
 
 
 def main():
-    t = []
-    refs = []
+    """Entry point."""
+    refs = get_square_refs()
 
-    refs_tmp = get_square_refs()
-    for i in range(refs_tmp.shape[1]):
-        refs.append(refs_tmp[:, i : i + 1])
     t = [0]
-    for i in range(len(refs) - 1):
+    for _ in range(len(refs) - 1):
         t.append(t[-1] + DT)
 
-    dt = DT
-    # x = np.array([[refs[0][0, 0] + 0.5], [refs[0][1, 0] + 0.5], [np.pi / 2], [0], [0]])
-    x = np.array([[4], [-1], [3 * np.pi / 2], [0], [0]])
-    diff_drive = DifferentialDrive(dt, x)
+    x = np.array([[0], [0], [0], [0], [0]])
+    diff_drive = DifferentialDrive(DT)
+    diff_drive.x = x.copy()
 
     start = time.time()
-    state_rec, ref_rec, u_rec, y_rec = diff_drive.generate_time_responses(refs)
+    state_rec, ref_rec, u_rec, y_rec = fct.generate_time_responses(diff_drive, refs)
     end = time.time()
-    print("")
-    print(f"Total time = {round(end - start, 3)} s")
+    print(f"\nTotal time = {round(end - start, 3)} s")
 
     plt.figure(1)
     x_rec = np.squeeze(np.asarray(state_rec[0, :]))
@@ -390,20 +366,26 @@ def main():
     plt.ylabel("y (m)")
     plt.legend()
 
-    # Equalize aspect ratio
-    xlim = plt.xlim()
-    width = abs(xlim[0]) + abs(xlim[1])
-    ylim = plt.ylim()
-    height = abs(ylim[0]) + abs(ylim[1])
-    if width > height:
-        plt.ylim([-width / 2, width / 2])
-    else:
-        plt.xlim([-height / 2, height / 2])
+    plt.gca().set_aspect(1.0)
+    plt.gca().set_box_aspect(1.0)
 
     if "--noninteractive" in sys.argv:
         plt.savefig("erts_diff_drive_xy.png")
 
-    diff_drive.plot_time_responses(t, state_rec, ref_rec, u_rec)
+    fct.plot_time_responses(
+        [
+            "x position (m)",
+            "y position (m)",
+            "Heading (rad)",
+            "Left velocity (m/s)",
+            "Right velocity (m/s)",
+        ],
+        ["Left voltage (V)", "Right voltage (V)"],
+        t,
+        state_rec,
+        ref_rec,
+        u_rec,
+    )
 
     if "--noninteractive" in sys.argv:
         plt.savefig("erts_diff_drive_response.png")
