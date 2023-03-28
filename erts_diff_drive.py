@@ -353,7 +353,7 @@ def main():
     diff_drive.x = x.copy()
 
     start = time.time()
-    state_rec, ref_rec, u_rec, y_rec = fct.generate_time_responses(diff_drive, refs)
+    ref_rec, state_rec, u_rec, y_rec = fct.generate_time_responses(diff_drive, refs)
     end = time.time()
     print(f"\nTotal time = {round(end - start, 3)} s")
 
@@ -382,8 +382,8 @@ def main():
         ],
         ["Left voltage (V)", "Right voltage (V)"],
         t,
-        state_rec,
         ref_rec,
+        state_rec,
         u_rec,
     )
 
