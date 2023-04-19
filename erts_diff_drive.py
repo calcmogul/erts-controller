@@ -358,8 +358,8 @@ def main():
     print(f"\nTotal time = {round(end - start, 3)} s")
 
     plt.figure(1)
-    plt.plot(state_rec[0, :], state_rec[1, :], label="ERTS controller")
     plt.plot(ref_rec[0, :], ref_rec[1, :], label="Reference trajectory")
+    plt.plot(state_rec[0, :], state_rec[1, :], label="ERTS controller")
     plt.xlabel("x (m)")
     plt.ylabel("y (m)")
     plt.legend()
