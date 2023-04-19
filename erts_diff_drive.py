@@ -353,14 +353,12 @@ def main():
     diff_drive.x = x.copy()
 
     start = time.time()
-    ref_rec, state_rec, u_rec, y_rec = fct.generate_time_responses(diff_drive, refs)
+    ref_rec, state_rec, u_rec, _ = fct.generate_time_responses(diff_drive, refs)
     end = time.time()
     print(f"\nTotal time = {round(end - start, 3)} s")
 
     plt.figure(1)
-    x_rec = np.squeeze(np.asarray(state_rec[0, :]))
-    y_rec = np.squeeze(np.asarray(state_rec[1, :]))
-    plt.plot(x_rec, y_rec, label="ERTS controller")
+    plt.plot(state_rec[0, :], state_rec[1, :], label="ERTS controller")
     plt.plot(ref_rec[0, :], ref_rec[1, :], label="Reference trajectory")
     plt.xlabel("x (m)")
     plt.ylabel("y (m)")
