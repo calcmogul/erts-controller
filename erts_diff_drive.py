@@ -49,7 +49,7 @@ def get_square_refs():
     point_vectors = [np.array([[x], [y]]) for x, y in points]
     for pt0, pt1 in zip(point_vectors, point_vectors[1:]):
         diff = pt1 - pt0
-        t = math.sqrt(diff.T @ diff) / v
+        t = math.sqrt((diff.T @ diff)[0, 0]) / v
         new_heading = math.atan2(diff[1, 0], diff[0, 0])
 
         heading_diff = new_heading - heading
