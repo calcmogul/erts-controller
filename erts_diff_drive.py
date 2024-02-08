@@ -267,27 +267,25 @@ class DifferentialDrive:
 
         # Prediction
         N = min(len(self.refs) - 1, self.t + HORIZON)
-        for tau in range(self.t + 1, N + 1):
-            self.x_hat_pre[tau] = fct.rk4(
-                self.f, self.x_hat_post[tau - 1], np.zeros((2, 1)), self.dt
+        for τ in range(self.t + 1, N + 1):
+            self.x_hat_pre[τ] = fct.rk4(
+                self.f, self.x_hat_post[τ - 1], np.zeros((2, 1)), self.dt
             )
 
             # Linearization
-            self.A[tau - 1] = fct.discretize_a(
-                self.df_dx(self.x_hat_post[tau - 1], np.zeros((2, 1))), self.dt
+            self.A[τ - 1] = fct.discretize_a(
+                self.df_dx(self.x_hat_post[τ - 1], np.zeros((2, 1))), self.dt
             )
-            C = self.dh_dx(self.x_hat_pre[tau], np.zeros((2, 1)))
+            C = self.dh_dx(self.x_hat_pre[τ], np.zeros((2, 1)))
 
-            s_tau = C @ self.refs[tau]
+            s_τ = C @ self.refs[τ]
 
             Q = B @ self.Rinv @ B.T
-            self.P_pre[tau] = (
-                self.A[tau - 1] @ self.P_post[tau - 1] @ self.A[tau - 1].T + Q
-            )
+            self.P_pre[τ] = self.A[τ - 1] @ self.P_post[τ - 1] @ self.A[τ - 1].T + Q
 
             # S = CPCᵀ + R
             R = C @ self.Qinv @ C.T
-            S = C @ self.P_pre[tau] @ C.T + R
+            S = C @ self.P_pre[τ] @ C.T + R
 
             # We want to put K = PCᵀS⁻¹ into Ax = b form so we can solve it more
             # efficiently.
@@ -301,12 +299,12 @@ class DifferentialDrive:
             #
             # Kᵀ = Sᵀ.solve(CPᵀ)
             # K = (Sᵀ.solve(CPᵀ))ᵀ
-            K = np.linalg.solve(S.T, C @ self.P_pre[tau].T).T
+            K = np.linalg.solve(S.T, C @ self.P_pre[τ].T).T
 
-            self.x_hat_post[tau] = self.x_hat_pre[tau] + K @ (
-                s_tau - self.h(self.x_hat_pre[tau])
+            self.x_hat_post[τ] = self.x_hat_pre[τ] + K @ (
+                s_τ - self.h(self.x_hat_pre[τ])
             )
-            self.P_post[tau] = (np.eye(5) - K @ C) @ self.P_pre[tau] @ (
+            self.P_post[τ] = (np.eye(5) - K @ C) @ self.P_pre[τ] @ (
                 np.eye(5) - K @ C
             ).T + K @ R @ K.T
 
@@ -314,10 +312,10 @@ class DifferentialDrive:
         self.x_hat_smooth[N] = self.x_hat_post[N]
 
         # Smoothing
-        for tau in range(N - 1, (self.t + 1) - 1, -1):
-            L = self.P_post[tau] @ self.A[tau].T @ np.linalg.pinv(self.P_pre[tau + 1])
-            self.x_hat_smooth[tau] = self.x_hat_post[tau] + L @ (
-                self.x_hat_smooth[tau + 1] - self.x_hat_pre[tau + 1]
+        for τ in range(N - 1, (self.t + 1) - 1, -1):
+            L = self.P_post[τ] @ self.A[τ].T @ np.linalg.pinv(self.P_pre[τ + 1])
+            self.x_hat_smooth[τ] = self.x_hat_post[τ] + L @ (
+                self.x_hat_smooth[τ + 1] - self.x_hat_pre[τ + 1]
             )
 
         # x̂ₖ₊₁ = f(x̂ₖ) + Buₖ
