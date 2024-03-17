@@ -1,0 +1,17 @@
+cppHeaderFileInclude {
+  \.hpp$
+}
+
+cppSrcFileInclude {
+  \.cpp$
+}
+
+modifiableFileExclude {
+  \.patch$
+  \.pdf$
+}
+
+includeOtherLibs {
+  ^Eigen/
+  ^fmt/
+}

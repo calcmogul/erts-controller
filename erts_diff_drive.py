@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 DT = 0.02
-HORIZON = 50
+HORIZON = 100
 
 
 def lerp(a, b, t):
@@ -34,7 +34,7 @@ def get_square_refs():
     Generate square path reference.
     """
     refs = []
-    heading = 0
+    heading = 0.0
     points = [
         (0, 0),
         (2, 0),
@@ -45,7 +45,7 @@ def get_square_refs():
         (4, -2),
         (0, -2),
     ]
-    v = 2
+    v = 2.0
     point_vectors = [np.array([[x], [y]]) for x, y in points]
     for pt0, pt1 in zip(point_vectors, point_vectors[1:]):
         diff = pt1 - pt0
@@ -91,16 +91,16 @@ class DifferentialDrive:
         self.dt = dt
 
         # Number of motors per side
-        num_motors = 3.0
+        num_motors = 3
         # Gear ratio
         G = 60.0 / 11.0
         # Drivetrain mass in kg
-        m = 52
+        m = 52.0
         # Radius of wheels in meters
         r = 0.08255 / 2.0
         # Radius of robot in meters
         self.rb = 0.59055 / 2.0
-        # Moment of inertia of the differential drive in kg-m^2
+        # Moment of inertia of the differential drive in kg-m²
         J = 6.0
 
         motor = fct.models.gearbox(fct.models.MOTOR_CIM, num_motors)
@@ -159,7 +159,6 @@ class DifferentialDrive:
         self.refs = get_square_refs()
 
         # Kalman smoother storage
-        self.x_hat_pre = [np.zeros((5, 1)) for _ in range(len(self.refs))]
         self.x_hat_pre = [np.zeros((5, 1)) for _ in range(len(self.refs))]
         self.x_hat_post = [np.zeros((5, 1)) for _ in range(len(self.refs))]
         self.A = [np.zeros((5, 5)) for _ in range(len(self.refs))]
@@ -280,12 +279,13 @@ class DifferentialDrive:
 
             s_τ = C @ self.refs[τ]
 
-            Q = B @ self.Rinv @ B.T
-            self.P_pre[τ] = self.A[τ - 1] @ self.P_post[τ - 1] @ self.A[τ - 1].T + Q
+            self.P_pre[τ] = (
+                self.A[τ - 1] @ self.P_post[τ - 1] @ self.A[τ - 1].T
+                + B @ self.Rinv @ B.T
+            )
 
-            # S = CPCᵀ + R
-            R = C @ self.Qinv @ C.T
-            S = C @ self.P_pre[τ] @ C.T + R
+            # S = CPCᵀ + CQ⁻¹Cᵀ
+            S = C @ self.P_pre[τ] @ C.T + C @ self.Qinv @ C.T
 
             # We want to put K = PCᵀS⁻¹ into Ax = b form so we can solve it more
             # efficiently.
@@ -298,7 +298,7 @@ class DifferentialDrive:
             # The solution of Ax = b can be found via x = A.solve(b).
             #
             # Kᵀ = Sᵀ.solve(CPᵀ)
-            # K = (Sᵀ.solve(CPᵀ))ᵀ
+            # K = Sᵀ.solve(CPᵀ)ᵀ
             K = np.linalg.solve(S.T, C @ self.P_pre[τ].T).T
 
             self.x_hat_post[τ] = self.x_hat_pre[τ] + K @ (
@@ -306,14 +306,22 @@ class DifferentialDrive:
             )
             self.P_post[τ] = (np.eye(5) - K @ C) @ self.P_pre[τ] @ (
                 np.eye(5) - K @ C
-            ).T + K @ R @ K.T
+            ).T + K @ C @ self.Qinv @ C.T @ K.T
 
         # Last filtered estimate is already optimal smoothed estimate
         self.x_hat_smooth[N] = self.x_hat_post[N]
 
         # Smoothing
         for τ in range(N - 1, (self.t + 1) - 1, -1):
-            L = self.P_post[τ] @ self.A[τ].T @ np.linalg.pinv(self.P_pre[τ + 1])
+            # L = P⁺[τ] A[τ]ᵀ P⁻[τ + 1]⁻¹
+            # L P⁻[τ + 1] = P⁺[τ] A[τ]ᵀ
+            # P⁻[τ + 1]ᵀ Lᵀ = A[τ] P⁺[τ]ᵀ
+            # Lᵀ = P⁻[τ + 1]ᵀ.solve(A[τ] P⁺[τ]ᵀ)
+            # L = P⁻[τ + 1]ᵀ.solve(A[τ] P⁺[τ]ᵀ)ᵀ
+            try:
+                L = np.linalg.solve(self.P_pre[τ + 1].T, self.A[τ] @ self.P_post[τ].T).T
+            except np.linalg.LinAlgError:
+                L = self.P_post[τ] @ self.A[τ].T @ np.linalg.pinv(self.P_pre[τ + 1])
             self.x_hat_smooth[τ] = self.x_hat_post[τ] + L @ (
                 self.x_hat_smooth[τ + 1] - self.x_hat_pre[τ + 1]
             )
@@ -342,11 +350,11 @@ def main():
     """Entry point."""
     refs = get_square_refs()
 
-    t = [0]
+    t = [0.0]
     for _ in range(len(refs) - 1):
         t.append(t[-1] + DT)
 
-    x = np.array([[0], [0], [0], [0], [0]])
+    x = np.zeros((5, 1))
     diff_drive = DifferentialDrive(DT)
     diff_drive.x = x.copy()
 
