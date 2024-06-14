@@ -17,26 +17,21 @@ file(GLOB_RECURSE ERTSDiffDrive_src src/*.cpp)
 add_executable(ERTSDiffDrive ${ERTSDiffDrive_src})
 
 target_compile_options(ERTSDiffDrive PRIVATE -Wall -Wextra -Werror)
-target_compile_features(ERTSDiffDrive PUBLIC cxx_std_20)
+target_compile_features(ERTSDiffDrive PUBLIC cxx_std_23)
 target_include_directories(ERTSDiffDrive PRIVATE src)
 
 include(FetchContent)
 
 # Options for using a package manager (e.g., vcpkg) for certain dependencies
 option(USE_SYSTEM_EIGEN "Use system eigen" OFF)
-option(USE_SYSTEM_FMT "Use system fmt" OFF)
 
 # Eigen dependency
 if(NOT USE_SYSTEM_EIGEN)
     fetchcontent_declare(
         Eigen3
         GIT_REPOSITORY https://gitlab.com/libeigen/eigen.git
-        # master on 2024-03-06
-        GIT_TAG 17f3bf8985021c242eedc9fa26c5c66d43a300f2
-        PATCH_COMMAND
-            git apply
-            ${CMAKE_CURRENT_SOURCE_DIR}/cmake/eigen-disable-fortran-support.patch
-        UPDATE_DISCONNECTED 1
+        # master on 2024-06-14
+        GIT_TAG 02bcf9b5918d46016bc88e5e9abebb6caa5a80b7
     )
     fetchcontent_makeavailable(Eigen3)
 else()
@@ -44,17 +39,3 @@ else()
 endif()
 
 target_link_libraries(ERTSDiffDrive PUBLIC Eigen3::Eigen)
-
-# fmt dependency
-if(NOT USE_SYSTEM_FMT)
-    fetchcontent_declare(
-        fmt
-        GIT_REPOSITORY https://github.com/fmtlib/fmt.git
-        GIT_TAG 10.2.1
-    )
-    fetchcontent_makeavailable(fmt)
-else()
-    find_package(fmt CONFIG REQUIRED)
-endif()
-
-target_link_libraries(ERTSDiffDrive PUBLIC fmt::fmt)

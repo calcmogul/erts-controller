@@ -8,13 +8,13 @@
 #include <chrono>
 #include <cmath>
 #include <numbers>
+#include <print>
 #include <string_view>
 #include <vector>
 
 #include <Eigen/Cholesky>
 #include <Eigen/Core>
 #include <Eigen/QR>
-#include <fmt/core.h>
 
 #include "DCMotor.hpp"
 #include "Discretization.hpp"
@@ -421,7 +421,7 @@ int main() {
 
   auto end = std::chrono::system_clock::now();
 
-  fmt::print(stderr, "Total time = {} ms\n",
+  std::print(stderr, "Total time = {} ms\n",
              std::chrono::duration_cast<std::chrono::microseconds>(end - start)
                      .count() /
                  1e3);
