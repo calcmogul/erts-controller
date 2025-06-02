@@ -13,7 +13,7 @@
  * @param dt The time over which to integrate.
  */
 template <typename F, typename T, typename U>
-T RK4(F&& f, T x, U u, std::chrono::duration<double> dt) {
+T rk4(F&& f, T x, U u, std::chrono::duration<double> dt) {
   const auto h = dt.count();
 
   T k1 = f(x, u);

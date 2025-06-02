@@ -9,9 +9,10 @@
 #include <vector>
 
 template <typename T, size_t N>
-void WriteVectorCSV(std::string_view filename, const std::vector<double>& times,
-                    const std::vector<T>& data,
-                    std::array<std::string_view, N> labels) {
+void write_vector_csv(std::string_view filename,
+                      const std::vector<double>& times,
+                      const std::vector<T>& data,
+                      std::array<std::string_view, N> labels) {
   std::ofstream csv{std::string{filename}};
   if (!csv.is_open()) {
     return;

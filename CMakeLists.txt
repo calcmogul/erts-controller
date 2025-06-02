@@ -6,19 +6,19 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "RelWithDebInfo" CACHE STRING "" FORCE)
 endif()
 
-project(ERTSDiffDrive)
+project(erts_diff_drive)
 
 # Generate compile_commands.json by default
 if(NOT CMAKE_EXPORT_COMPILE_COMMANDS)
     set(CMAKE_EXPORT_COMPILE_COMMANDS "YES" CACHE STRING "" FORCE)
 endif()
 
-file(GLOB_RECURSE ERTSDiffDrive_src src/*.cpp)
-add_executable(ERTSDiffDrive ${ERTSDiffDrive_src})
+file(GLOB_RECURSE erts_diff_drive_src src/*.cpp)
+add_executable(erts_diff_drive ${erts_diff_drive_src})
 
-target_compile_options(ERTSDiffDrive PRIVATE -Wall -Wextra -Werror)
-target_compile_features(ERTSDiffDrive PUBLIC cxx_std_23)
-target_include_directories(ERTSDiffDrive PRIVATE src)
+target_compile_options(erts_diff_drive PRIVATE -Wall -Wextra -Werror)
+target_compile_features(erts_diff_drive PUBLIC cxx_std_23)
+target_include_directories(erts_diff_drive PRIVATE src)
 
 include(FetchContent)
 
@@ -38,4 +38,4 @@ else()
     find_package(Eigen3 CONFIG REQUIRED)
 endif()
 
-target_link_libraries(ERTSDiffDrive PUBLIC Eigen3::Eigen)
+target_link_libraries(erts_diff_drive PUBLIC Eigen3::Eigen)

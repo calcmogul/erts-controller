@@ -6,8 +6,8 @@ https://file.tavsys.net/control/papers/Extended%20Rauch-Tung-Striebel%20Controll
 """
 
 import math
-import time
 import sys
+import time
 
 import frccontrol as fct
 import matplotlib.pyplot as plt
@@ -123,11 +123,11 @@ class DifferentialDrive:
         )
 
         # Linearized dynamics
-        self.Ac = np.zeros((5, 5))
-        self.Ac[2, 3] = -0.5 / self.rb
-        self.Ac[2, 4] = 0.5 / self.rb
-        self.Ac[3:5, 3:5] = self.velocity_A
-        self.Bc = np.block(
+        self.A_c = np.zeros((5, 5))
+        self.A_c[2, 3] = -0.5 / self.rb
+        self.A_c[2, 4] = 0.5 / self.rb
+        self.A_c[3:5, 3:5] = self.velocity_A
+        self.B_c = np.block(
             [
                 [np.zeros((3, 2))],
                 [self.velocity_B],
@@ -146,12 +146,12 @@ class DifferentialDrive:
         #         right velocity (m/s)
         # Q = diag(1/q²)
         # Q⁻¹ = diag(q²)
-        self.Qinv = np.diag(np.square([0.125, 0.125, 10.0, 0.95, 0.95]))
+        self.Q_inv = np.diag(np.square([0.125, 0.125, 10.0, 0.95, 0.95]))
 
         # Inputs: Left voltage (V), right voltage (V)
         # R = diag(1/r²)
         # R⁻¹ = diag(r²)
-        self.Rinv = np.diag(np.square([12.0, 12.0]))
+        self.R_inv = np.diag(np.square([12.0, 12.0]))
 
         self.t = 0
 
@@ -215,13 +215,13 @@ class DifferentialDrive:
         v = (x[3, 0] + x[4, 0]) / 2.0
         c = math.cos(x[2, 0])
         s = math.sin(x[2, 0])
-        self.Ac[0, 2] = -v * s
-        self.Ac[0, 3] = 0.5 * c
-        self.Ac[0, 4] = 0.5 * c
-        self.Ac[1, 2] = v * c
-        self.Ac[1, 3] = 0.5 * s
-        self.Ac[1, 4] = 0.5 * s
-        return self.Ac
+        self.A_c[0, 2] = -v * s
+        self.A_c[0, 3] = 0.5 * c
+        self.A_c[0, 4] = 0.5 * c
+        self.A_c[1, 2] = v * c
+        self.A_c[1, 3] = 0.5 * s
+        self.A_c[1, 4] = 0.5 * s
+        return self.A_c
 
     # pragma pylint: disable=unused-argument
     def dh_dx(self, x, u):
@@ -255,9 +255,9 @@ class DifferentialDrive:
         states = self.x.shape[0]
 
         # Linearize model
-        Ac = self.df_dx(self.x, np.zeros((2, 1)))
-        _, B = fct.discretize_ab(Ac, self.Bc, self.dt)
-        Binv = np.linalg.pinv(B)
+        A_c = self.df_dx(self.x, np.zeros((2, 1)))
+        _, B = fct.discretize_ab(A_c, self.B_c, self.dt)
+        B_inv = np.linalg.pinv(B)
 
         self.x_hat_pre[self.t] = self.x.copy()
         self.P_pre[self.t] = np.zeros((states, states))
@@ -281,11 +281,11 @@ class DifferentialDrive:
 
             self.P_pre[τ] = (
                 self.A[τ - 1] @ self.P_post[τ - 1] @ self.A[τ - 1].T
-                + B @ self.Rinv @ B.T
+                + B @ self.R_inv @ B.T
             )
 
             # S = CPCᵀ + CQ⁻¹Cᵀ
-            S = C @ self.P_pre[τ] @ C.T + C @ self.Qinv @ C.T
+            S = C @ self.P_pre[τ] @ C.T + C @ self.Q_inv @ C.T
 
             # We want to put K = PCᵀS⁻¹ into Ax = b form so we can solve it more
             # efficiently.
@@ -304,9 +304,9 @@ class DifferentialDrive:
             self.x_hat_post[τ] = self.x_hat_pre[τ] + K @ (
                 s_τ - self.h(self.x_hat_pre[τ])
             )
-            self.P_post[τ] = (np.eye(5) - K @ C) @ self.P_pre[τ] @ (
-                np.eye(5) - K @ C
-            ).T + K @ C @ self.Qinv @ C.T @ K.T
+            self.P_post[τ] = (np.identity(5) - K @ C) @ self.P_pre[τ] @ (
+                np.identity(5) - K @ C
+            ).T + K @ C @ self.Q_inv @ C.T @ K.T
 
         # Last filtered estimate is already optimal smoothed estimate
         self.x_hat_smooth[N] = self.x_hat_post[N]
@@ -329,7 +329,7 @@ class DifferentialDrive:
         # x̂ₖ₊₁ = f(x̂ₖ) + Buₖ
         # Buₖ = x̂ₖ₊₁ − f(x̂ₖ)
         # uₖ = B⁺(x̂ₖ₊₁ − f(x̂ₖ))
-        self.u = Binv @ (
+        self.u = B_inv @ (
             self.x_hat_smooth[self.t + 1]
             - fct.rk4(self.f, self.x_hat_post[self.t], np.zeros((2, 1)), self.dt)
         )

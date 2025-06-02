@@ -16,10 +16,10 @@
 #include <Eigen/Core>
 #include <Eigen/QR>
 
-#include "DCMotor.hpp"
-#include "Discretization.hpp"
-#include "RK4.hpp"
-#include "WriteVectorCSV.hpp"
+#include "dc_motor.hpp"
+#include "discretization.hpp"
+#include "rk4.hpp"
+#include "write_vector_csv.hpp"
 
 using namespace std::chrono_literals;
 using namespace std::string_view_literals;
@@ -42,7 +42,7 @@ T lerp(const T& a, const T& b, double t) {
 /**
  * Generate square path reference.
  */
-std::vector<Eigen::Vector<double, 5>> GetSquareRefs() {
+std::vector<Eigen::Vector<double, 5>> get_square_refs() {
   std::vector<Eigen::Vector<double, 5>> refs;
 
   double heading = 0.0;
@@ -104,7 +104,7 @@ class DifferentialDrive {
   // Moment of inertia of the differential drive in kg-m²
   static constexpr double J = 6.0;
 
-  static constexpr DCMotor motor = DCMotor::CIM(num_motors);
+  static constexpr DCMotor motor = DCMotor::cim(num_motors);
 
   static constexpr double C1 =
       -(G * G) * motor.Kt / (motor.Kv * motor.R * r * r);
@@ -126,17 +126,18 @@ class DifferentialDrive {
   //         right velocity (m/s)
   // Q = diag(1/q²)
   // Q⁻¹ = diag(q²)
-  static constexpr Eigen::Matrix<double, 5, 5> Qinv{{0.125 * 0.125, 0, 0, 0, 0},
-                                                    {0, 0.125 * 0.125, 0, 0, 0},
-                                                    {0, 0, 10.0 * 10.0, 0, 0},
-                                                    {0, 0, 0, 0.95 * 0.95, 0},
-                                                    {0, 0, 0, 0, 0.95 * 0.95}};
+  static constexpr Eigen::Matrix<double, 5, 5> Q_inv{
+      {0.125 * 0.125, 0, 0, 0, 0},
+      {0, 0.125 * 0.125, 0, 0, 0},
+      {0, 0, 10.0 * 10.0, 0, 0},
+      {0, 0, 0, 0.95 * 0.95, 0},
+      {0, 0, 0, 0, 0.95 * 0.95}};
 
   // Inputs: Left voltage (V), right voltage (V)
   // R = diag(1/r²)
   // R⁻¹ = diag(r²)
-  static constexpr Eigen::Matrix<double, 2, 2> Rinv{{12.0 * 12.0, 0},
-                                                    {0, 12.0 * 12.0}};
+  static constexpr Eigen::Matrix<double, 2, 2> R_inv{{12.0 * 12.0, 0},
+                                                     {0, 12.0 * 12.0}};
 
   std::chrono::duration<double> m_dt = 0s;
 
@@ -166,7 +167,7 @@ class DifferentialDrive {
    */
   explicit DifferentialDrive(std::chrono::duration<double> dt) : m_dt{dt} {
     // Get reference trajectory
-    m_refs = GetSquareRefs();
+    m_refs = get_square_refs();
 
     // Kalman smoother storage
     x_hat_pre.reserve(m_refs.size());
@@ -273,11 +274,11 @@ class DifferentialDrive {
    * Advance the model by one timestep.
    *
    * @param r The current reference.
-   * @param nextR The next reference.
+   * @param next_r The next reference.
    */
-  void Update([[maybe_unused]] const Eigen::Vector<double, 5>& r,
-              [[maybe_unused]] const Eigen::Vector<double, 5>& nextR) {
-    x = RK4([this](const auto& x, const auto& u) { return f(x, u); }, x, u,
+  void update([[maybe_unused]] const Eigen::Vector<double, 5>& r,
+              [[maybe_unused]] const Eigen::Vector<double, 5>& next_r) {
+    x = rk4([this](const auto& x, const auto& u) { return f(x, u); }, x, u,
             m_dt);
 
     // Since this is the last reference, there are no
@@ -288,11 +289,13 @@ class DifferentialDrive {
     }
 
     // Linearize model
-    Eigen::Matrix<double, 5, 5> Ac = df_dx(x, Eigen::Vector<double, 2>::Zero());
-    Eigen::Matrix<double, 5, 2> Bc = df_du(x, Eigen::Vector<double, 2>::Zero());
-    Eigen::Matrix<double, 5, 5> Ad;
-    Eigen::Matrix<double, 5, 2> Bd;
-    DiscretizeAB<5, 2>(Ac, Bc, m_dt, &Ad, &Bd);
+    Eigen::Matrix<double, 5, 5> A_c =
+        df_dx(x, Eigen::Vector<double, 2>::Zero());
+    Eigen::Matrix<double, 5, 2> B_c =
+        df_du(x, Eigen::Vector<double, 2>::Zero());
+    Eigen::Matrix<double, 5, 5> A_d;
+    Eigen::Matrix<double, 5, 2> B_d;
+    discretize_ab<5, 2>(A_c, B_c, m_dt, &A_d, &B_d);
 
     x_hat_pre[t] = x;
     P_pre[t] = Eigen::Matrix<double, 5, 5>::Zero();
@@ -303,23 +306,24 @@ class DifferentialDrive {
     int N = std::min<double>(m_refs.size() - 1, t + HORIZON);
     for (int τ = t + 1; τ < N + 1; ++τ) {
       x_hat_pre[τ] =
-          RK4([this](const auto& x, const auto& u) { return f(x, u); },
+          rk4([this](const auto& x, const auto& u) { return f(x, u); },
               x_hat_post[τ - 1], Eigen::Vector<double, 2>::Zero(), m_dt);
 
       // Linearization
-      DiscretizeA<5>(df_dx(x_hat_post[τ - 1], Eigen::Vector<double, 2>::Zero()),
-                     m_dt, &A[τ - 1]);
+      discretize_a<5>(
+          df_dx(x_hat_post[τ - 1], Eigen::Vector<double, 2>::Zero()), m_dt,
+          &A[τ - 1]);
 
       Eigen::Matrix<double, 3, 5> C =
           dh_dx(x_hat_post[τ - 1], Eigen::Vector<double, 2>::Zero());
       Eigen::Matrix<double, 3, 1> s_τ = C * m_refs[τ];
 
       P_pre[τ] = A[τ - 1] * P_post[τ - 1] * A[τ - 1].transpose() +
-                 Bd * Rinv * Bd.transpose();
+                 B_d * R_inv * B_d.transpose();
 
       // S = CPCᵀ + CQ⁻¹Cᵀ
       Eigen::Matrix<double, 3, 3> S =
-          C * P_pre[τ] * C.transpose() + C * Qinv * C.transpose();
+          C * P_pre[τ] * C.transpose() + C * Q_inv * C.transpose();
 
       // We want to put K = PCᵀS⁻¹ into Ax = b form so we can solve it more
       // efficiently.
@@ -344,7 +348,7 @@ class DifferentialDrive {
                                               {0, 0, 0, 1, 0},
                                               {0, 0, 0, 0, 1}};
       P_post[τ] = (I - K * C) * P_pre[τ] * (I - K * C).transpose() +
-                  K * C * Qinv * C.transpose() * K.transpose();
+                  K * C * Q_inv * C.transpose() * K.transpose();
     }
 
     // Last filtered estimate is already optimal smoothed estimate
@@ -370,9 +374,9 @@ class DifferentialDrive {
     // x̂ₖ₊₁ = f(x̂ₖ) + Buₖ
     // Buₖ = x̂ₖ₊₁ − f(x̂ₖ)
     // uₖ = B⁺(x̂ₖ₊₁ − f(x̂ₖ))
-    u = Bd.householderQr().solve(
+    u = B_d.householderQr().solve(
         x_hat_smooth[t + 1] -
-        RK4([this](const auto& x, const auto& u) { return f(x, u); },
+        rk4([this](const auto& x, const auto& u) { return f(x, u); },
             x_hat_post[t], Eigen::Vector<double, 2>::Zero(), m_dt));
 
     double u_cap = u.lpNorm<Eigen::Infinity>();
@@ -384,7 +388,7 @@ class DifferentialDrive {
 };
 
 int main() {
-  auto refs = GetSquareRefs();
+  auto refs = get_square_refs();
 
   std::vector<double> t;
   t.emplace_back(0.0);
@@ -408,9 +412,9 @@ int main() {
   // Run simulation
   for (size_t i = 0; i < refs.size(); ++i) {
     if (i < refs.size() - 1) {
-      diff_drive.Update(refs[i], refs[i + 1]);
+      diff_drive.update(refs[i], refs[i + 1]);
     } else {
-      diff_drive.Update(refs[i], refs[i]);
+      diff_drive.update(refs[i], refs[i]);
     }
 
     // Log states for plotting
@@ -426,17 +430,19 @@ int main() {
                      .count() /
                  1e3);
 
-  WriteVectorCSV("ERTS references.csv"sv, t, r_rec,
-                 std::array{"Time (s)"sv, "X position (m)"sv,
-                            "Y position (m)"sv, "Heading (rad)"sv,
-                            "Left velocity (m/s)"sv, "Right velocity (m/s)"sv});
+  write_vector_csv(
+      "ERTS references.csv"sv, t, r_rec,
+      std::array{"Time (s)"sv, "X position (m)"sv, "Y position (m)"sv,
+                 "Heading (rad)"sv, "Left velocity (m/s)"sv,
+                 "Right velocity (m/s)"sv});
 
-  WriteVectorCSV("ERTS states.csv"sv, t, x_rec,
-                 std::array{"Time (s)"sv, "X position (m)"sv,
-                            "Y position (m)"sv, "Heading (rad)"sv,
-                            "Left velocity (m/s)"sv, "Right velocity (m/s)"sv});
+  write_vector_csv(
+      "ERTS states.csv"sv, t, x_rec,
+      std::array{"Time (s)"sv, "X position (m)"sv, "Y position (m)"sv,
+                 "Heading (rad)"sv, "Left velocity (m/s)"sv,
+                 "Right velocity (m/s)"sv});
 
-  WriteVectorCSV(
+  write_vector_csv(
       "ERTS inputs.csv"sv, t, u_rec,
       std::array{"Time (s)"sv, "Left voltage (V)"sv, "Right voltage (V)"sv});
 }
