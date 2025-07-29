@@ -27,13 +27,13 @@ option(USE_SYSTEM_EIGEN "Use system eigen" OFF)
 
 # Eigen dependency
 if(NOT USE_SYSTEM_EIGEN)
-    fetchcontent_declare(
+    FetchContent_Declare(
         Eigen3
         GIT_REPOSITORY https://gitlab.com/libeigen/eigen.git
         # master on 2025-05-13
         GIT_TAG db85838ee2a2461e57a199cde4855c44f527fe07
     )
-    fetchcontent_makeavailable(Eigen3)
+    FetchContent_MakeAvailable(Eigen3)
 else()
     find_package(Eigen3 CONFIG REQUIRED)
 endif()
