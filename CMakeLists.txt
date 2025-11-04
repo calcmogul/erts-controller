@@ -1,16 +1,11 @@
 cmake_minimum_required(VERSION 3.21)
 
-# Set default build type to release with debug info (i.e. release mode
-# optimizations are performed, but debug info still exists).
-if(NOT CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE "RelWithDebInfo" CACHE STRING "" FORCE)
-endif()
+set(CMAKE_BUILD_TYPE "RelWithDebInfo" CACHE STRING "")
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 project(erts_diff_drive)
 
 include(FetchContent)
-
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 file(GLOB_RECURSE erts_diff_drive_src src/*.cpp)
 add_executable(erts_diff_drive ${erts_diff_drive_src})
