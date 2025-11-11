@@ -10,8 +10,3 @@ modifiableFileExclude {
   \.patch$
   \.pdf$
 }
-
-includeOtherLibs {
-  ^Eigen/
-  ^fmt/
-}
