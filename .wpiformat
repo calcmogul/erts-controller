@@ -1,12 +1,3 @@
-cppHeaderFileInclude {
-  \.hpp$
-}
-
-cppSrcFileInclude {
-  \.cpp$
-}
-
 modifiableFileExclude {
-  \.patch$
   \.pdf$
 }
