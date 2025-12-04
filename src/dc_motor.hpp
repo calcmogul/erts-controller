@@ -4,9 +4,7 @@
 
 #include <numbers>
 
-/**
- * Holds the constants for a DC motor.
- */
+/// Holds the constants for a DC motor.
 class DCMotor {
  public:
   /// Voltage at which the motor constants were measured.
@@ -33,16 +31,14 @@ class DCMotor {
   /// Motor torque constant.
   double Kt;
 
-  /**
-   * Constructs a DC motor.
-   *
-   * @param nominal_voltage Voltage at which the motor constants were measured.
-   * @param stall_torque Torque when stalled.
-   * @param stall_current Current draw when stalled.
-   * @param free_current Current draw under no load.
-   * @param free_speed Angular velocity under no load.
-   * @param num_motors Number of motors in a gearbox.
-   */
+  /// Constructs a DC motor.
+  ///
+  /// @param nominal_voltage Voltage at which the motor constants were measured.
+  /// @param stall_torque Torque when stalled.
+  /// @param stall_current Current draw when stalled.
+  /// @param free_current Current draw under no load.
+  /// @param free_speed Angular velocity under no load.
+  /// @param num_motors Number of motors in a gearbox.
   constexpr DCMotor(double nominal_voltage, double stall_torque,
                     double stall_current, double free_current,
                     double free_speed, int num_motors = 1)
@@ -55,9 +51,7 @@ class DCMotor {
         Kv(free_speed / (nominal_voltage - R * this->free_current)),
         Kt(this->stall_torque / this->stall_current) {}
 
-  /**
-   * Returns a gearbox of CIM motors.
-   */
+  /// Returns a gearbox of CIM motors.
   static constexpr DCMotor cim(int num_motors = 1) {
     return DCMotor(12.0, 2.42, 133.0, 2.7, rpm2radpsec(5310.0), num_motors);
   }

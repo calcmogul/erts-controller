@@ -27,21 +27,17 @@ using namespace std::string_view_literals;
 constexpr std::chrono::duration<double> DT = 20ms;
 constexpr int HORIZON = 100;
 
-/**
- * Linear interpolation between a and b.
- *
- * @param a Left value.
- * @param b Right value.
- * @param t Interpolant [0, 1].
- */
+/// Linear interpolation between a and b.
+///
+/// @param a Left value.
+/// @param b Right value.
+/// @param t Interpolant [0, 1].
 template <typename T>
 T lerp(const T& a, const T& b, double t) {
   return a + t * (b - a);
 }
 
-/**
- * Generate square path reference.
- */
+/// Generate square path reference.
 std::vector<Eigen::Vector<double, 5>> get_square_refs() {
   std::vector<Eigen::Vector<double, 5>> refs;
 
@@ -81,27 +77,25 @@ std::vector<Eigen::Vector<double, 5>> get_square_refs() {
   return refs;
 }
 
-/**
- * Differential drive with ERTS controller.
- */
+/// Differential drive with ERTS controller.
 class DifferentialDrive {
  public:
-  // Number of motors per side
+  /// Number of motors per side
   static constexpr int num_motors = 3;
 
-  // Gear ratio
+  /// Gear ratio
   static constexpr double G = 60.0 / 11.0;
 
-  // Drivetrain mass in kg
+  /// Drivetrain mass in kg
   static constexpr double m = 52.0;
 
-  // Radius of wheels in meters
+  /// Radius of wheels in meters
   static constexpr double r = 0.08255 / 2.0;
 
-  // Radius of robot in meters
+  /// Radius of robot in meters
   static constexpr double rb = 0.59055 / 2.0;
 
-  // Moment of inertia of the differential drive in kg-m²
+  /// Moment of inertia of the differential drive in kg-m²
   static constexpr double J = 6.0;
 
   static constexpr DCMotor motor = DCMotor::cim(num_motors);
@@ -122,10 +116,10 @@ class DifferentialDrive {
       {(1 / m - rb * rb / J) * C2, (1 / m + rb * rb / J) * C4},
   }};
 
-  // States: x (m), y (m), heading (rad), left velocity (m/s),
-  //         right velocity (m/s)
-  // Q = diag(1/q²)
-  // Q⁻¹ = diag(q²)
+  /// States: x (m), y (m), heading (rad), left velocity (m/s),
+  ///         right velocity (m/s)
+  /// Q = diag(1/q²)
+  /// Q⁻¹ = diag(q²)
   static constexpr Eigen::Matrix<double, 5, 5> Q_inv{
       {0.125 * 0.125, 0, 0, 0, 0},
       {0, 0.125 * 0.125, 0, 0, 0},
@@ -133,9 +127,9 @@ class DifferentialDrive {
       {0, 0, 0, 0.95 * 0.95, 0},
       {0, 0, 0, 0, 0.95 * 0.95}};
 
-  // Inputs: Left voltage (V), right voltage (V)
-  // R = diag(1/r²)
-  // R⁻¹ = diag(r²)
+  /// Inputs: Left voltage (V), right voltage (V)
+  /// R = diag(1/r²)
+  /// R⁻¹ = diag(r²)
   static constexpr Eigen::Matrix<double, 2, 2> R_inv{{12.0 * 12.0, 0},
                                                      {0, 12.0 * 12.0}};
 
@@ -143,13 +137,13 @@ class DifferentialDrive {
 
   size_t t = 0;
 
-  // Sim variables
+  /// Sim variables
   Eigen::Vector<double, 5> x = Eigen::Vector<double, 5>::Zero();
   Eigen::Vector<double, 2> u = Eigen::Vector<double, 2>::Zero();
 
   std::vector<Eigen::Vector<double, 5>> m_refs;
 
-  // Kalman smoother storage
+  /// Kalman smoother storage
   std::vector<Eigen::Vector<double, 5>> x_hat_pre;
   std::vector<Eigen::Vector<double, 5>> x_hat_post;
   std::vector<Eigen::Matrix<double, 5, 5>> A;
@@ -160,11 +154,9 @@ class DifferentialDrive {
   static constexpr Eigen::Vector<double, 2> u_min{{-12.0}, {-12.0}};
   static constexpr Eigen::Vector<double, 2> u_max{{12.0}, {12.0}};
 
-  /**
-   * Drivetrain subsystem.
-   *
-   * @param dt Time between model/controller updates.
-   */
+  /// Drivetrain subsystem.
+  ///
+  /// @param dt Time between model/controller updates.
   explicit DifferentialDrive(std::chrono::duration<double> dt) : m_dt{dt} {
     // Get reference trajectory
     m_refs = get_square_refs();
@@ -186,15 +178,13 @@ class DifferentialDrive {
     }
   }
 
-  /**
-   * Nonlinear differential drive dynamics.
-   *
-   * States: [[x], [y], [heading], [left velocity], [right velocity]]
-   * Inputs: [[left voltage], [right voltage]]
-   *
-   * @param x State vector.
-   * @param u Input vector.
-   */
+  /// Nonlinear differential drive dynamics.
+  ///
+  /// States: [[x], [y], [heading], [left velocity], [right velocity]]
+  /// Inputs: [[left voltage], [right voltage]]
+  ///
+  /// @param x State vector.
+  /// @param u Input vector.
   Eigen::Vector<double, 5> f(const Eigen::Vector<double, 5>& x,
                              const Eigen::Vector<double, 2>& u) {
     Eigen::Vector<double, 5> dxdt;
@@ -208,23 +198,19 @@ class DifferentialDrive {
     return dxdt;
   }
 
-  /**
-   * Nonlinear differential drive measurement model.
-   *
-   * Outputs: [[x], [y], [heading]]
-   *
-   * @param x State vector.
-   */
+  /// Nonlinear differential drive measurement model.
+  ///
+  /// Outputs: [[x], [y], [heading]]
+  ///
+  /// @param x State vector.
   Eigen::Vector<double, 3> h(const Eigen::Vector<double, 5>& x) const {
     return x.segment<3>(0);
   }
 
-  /**
-   * Returns the Jacobian of f with respect to the state.
-   *
-   * @param x The current state.
-   * @param u The current input.
-   */
+  /// Returns the Jacobian of f with respect to the state.
+  ///
+  /// @param x The current state.
+  /// @param u The current input.
   Eigen::Matrix<double, 5, 5> df_dx(
       const Eigen::Vector<double, 5>& x,
       [[maybe_unused]] const Eigen::Vector<double, 2>& u) {
@@ -240,12 +226,10 @@ class DifferentialDrive {
         {0.0, 0.0, 0.0, velocity_A(1, 0), velocity_A(1, 1)}};
   }
 
-  /**
-   * Returns the Jacobian of f with respect to the input.
-   *
-   * @param x The current state.
-   * @param u The current input.
-   */
+  /// Returns the Jacobian of f with respect to the input.
+  ///
+  /// @param x The current state.
+  /// @param u The current input.
   Eigen::Matrix<double, 5, 2> df_du(
       [[maybe_unused]] const Eigen::Vector<double, 5>& x,
       [[maybe_unused]] const Eigen::Vector<double, 2>& u) {
@@ -257,12 +241,10 @@ class DifferentialDrive {
         {(1 / m - rb * rb / J) * C2, (1 / m + rb * rb / J) * C4}};
   }
 
-  /**
-   * Returns the Jacobian of h with respect to the state.
-   *
-   * @param x The current state.
-   * @param u The current input.
-   */
+  /// Returns the Jacobian of h with respect to the state.
+  ///
+  /// @param x The current state.
+  /// @param u The current input.
   Eigen::Matrix<double, 3, 5> dh_dx(
       [[maybe_unused]] const Eigen::Vector<double, 5>& x,
       [[maybe_unused]] const Eigen::Vector<double, 2>& u) {
@@ -270,12 +252,10 @@ class DifferentialDrive {
         {1, 0, 0, 0, 0}, {0, 1, 0, 0, 0}, {0, 0, 1, 0, 0}};
   }
 
-  /**
-   * Advance the model by one timestep.
-   *
-   * @param r The current reference.
-   * @param next_r The next reference.
-   */
+  /// Advance the model by one timestep.
+  ///
+  /// @param r The current reference.
+  /// @param next_r The next reference.
   void update([[maybe_unused]] const Eigen::Vector<double, 5>& r,
               [[maybe_unused]] const Eigen::Vector<double, 5>& next_r) {
     x = rk4([this](const auto& x, const auto& u) { return f(x, u); }, x, u,
