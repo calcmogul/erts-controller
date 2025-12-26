@@ -18,18 +18,10 @@ set_property(TARGET erts_diff_drive PROPERTY COMPILE_WARNING_AS_ERROR ON)
 target_compile_features(erts_diff_drive PUBLIC cxx_std_23)
 target_include_directories(erts_diff_drive PRIVATE src)
 
-# Options for using a package manager (e.g., vcpkg) for certain dependencies
-option(USE_SYSTEM_EIGEN "Use system eigen" OFF)
-
-# Eigen dependency
-if(NOT USE_SYSTEM_EIGEN)
-    FetchContent_Declare(
-        Eigen3
-        GIT_REPOSITORY https://gitlab.com/libeigen/eigen.git
-        GIT_TAG 5.0.0
-    )
-    FetchContent_MakeAvailable(Eigen3)
-else()
-    find_package(Eigen3 CONFIG REQUIRED)
-endif()
+FetchContent_Declare(
+    Eigen3
+    GIT_REPOSITORY https://gitlab.com/libeigen/eigen.git
+    GIT_TAG 5.0.1
+)
+FetchContent_MakeAvailable(Eigen3)
 target_link_libraries(erts_diff_drive PUBLIC Eigen3::Eigen)
