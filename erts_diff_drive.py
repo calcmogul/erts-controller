@@ -299,7 +299,11 @@ class DifferentialDrive:
             #
             # Kᵀ = Sᵀ.solve(CPᵀ)
             # K = Sᵀ.solve(CPᵀ)ᵀ
-            K = np.linalg.solve(S.T, C @ self.P_pre[τ].T).T
+            #
+            # Drop the transposes on symmetric matrices S and P.
+            #
+            # K = (S.solve(CP))ᵀ
+            K = np.linalg.solve(S, C @ self.P_pre[τ]).T
 
             self.x_hat_post[τ] = self.x_hat_pre[τ] + K @ (
                 s_τ - self.h(self.x_hat_pre[τ])
@@ -318,8 +322,12 @@ class DifferentialDrive:
             # P⁻[τ + 1]ᵀ Lᵀ = A[τ] P⁺[τ]ᵀ
             # Lᵀ = P⁻[τ + 1]ᵀ.solve(A[τ] P⁺[τ]ᵀ)
             # L = P⁻[τ + 1]ᵀ.solve(A[τ] P⁺[τ]ᵀ)ᵀ
+            #
+            # Drop the transposes on symmetric matrix P.
+            #
+            # L = P⁻[τ + 1].solve(A[τ] P⁺[τ])ᵀ
             try:
-                L = np.linalg.solve(self.P_pre[τ + 1].T, self.A[τ] @ self.P_post[τ].T).T
+                L = np.linalg.solve(self.P_pre[τ + 1], self.A[τ] @ self.P_post[τ]).T
             except np.linalg.LinAlgError:
                 L = self.P_post[τ] @ self.A[τ].T @ np.linalg.pinv(self.P_pre[τ + 1])
             self.x_hat_smooth[τ] = self.x_hat_post[τ] + L @ (

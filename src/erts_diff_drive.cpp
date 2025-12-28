@@ -317,8 +317,11 @@ class DifferentialDrive {
       //
       // Kᵀ = Sᵀ.solve(CPᵀ)
       // K = (Sᵀ.solve(CPᵀ))ᵀ
-      Eigen::Matrix<double, 5, 3> K =
-          S.transpose().llt().solve(C * P_pre[τ].transpose()).transpose();
+      //
+      // Drop the transposes on symmetric matrices S and P.
+      //
+      // K = (S.solve(CP))ᵀ
+      Eigen::Matrix<double, 5, 3> K = S.ldlt().solve(C * P_pre[τ]).transpose();
 
       x_hat_post[τ] = x_hat_pre[τ] + K * (s_τ - h(x_hat_pre[τ]));
 
@@ -341,11 +344,12 @@ class DifferentialDrive {
       // P⁻[τ + 1]ᵀ Lᵀ = A[τ] P⁺[τ]ᵀ
       // Lᵀ = P⁻[τ + 1]ᵀ.solve(A[τ] P⁺[τ]ᵀ)
       // L = P⁻[τ + 1]ᵀ.solve(A[τ] P⁺[τ]ᵀ)ᵀ
-      Eigen::Matrix<double, 5, 5> L = P_pre[τ + 1]
-                                          .transpose()
-                                          .llt()
-                                          .solve(A[τ] * P_post[τ].transpose())
-                                          .transpose();
+      //
+      // Drop the transposes on symmetric matrix P.
+      //
+      // L = P⁻[τ + 1].solve(A[τ] P⁺[τ])ᵀ
+      Eigen::Matrix<double, 5, 5> L =
+          P_pre[τ + 1].llt().solve(A[τ] * P_post[τ]).transpose();
 
       x_hat_smooth[τ] =
           x_hat_post[τ] + L * (x_hat_smooth[τ + 1] - x_hat_pre[τ + 1]);
