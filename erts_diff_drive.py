@@ -203,7 +203,6 @@ class DifferentialDrive:
         """
         return x[:3, :]
 
-    # pragma pylint: disable=unused-argument
     def df_dx(self, x, u):
         """
         Returns the Jacobian of f with respect to the state.
@@ -223,7 +222,6 @@ class DifferentialDrive:
         self.A_c[1, 4] = 0.5 * s
         return self.A_c
 
-    # pragma pylint: disable=unused-argument
     def dh_dx(self, x, u):
         """
         Returns the Jacobian of h with respect to the state.
@@ -234,7 +232,6 @@ class DifferentialDrive:
         """
         return np.array([[1, 0, 0, 0, 0], [0, 1, 0, 0, 0], [0, 0, 1, 0, 0]])
 
-    # pragma pylint: disable=unused-argument
     def update(self, r, next_r):
         """
         Advance the model by one timestep.
