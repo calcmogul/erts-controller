@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
 """
 Runs Extended Rauch-Tung-Striebel controller on differential drive.
